@@ -7,7 +7,7 @@ from frappe.utils import today
 from da_services.api.v1 import notifications as api
 from da_services.services import constants as C
 from da_services.services import notifications as svc
-from da_services.tests.fixtures import as_user
+from da_services.tests.fixtures import as_user, ensure_geo_masters
 
 DA_W01 = "bc-da-w01@da.local"  # ET04 / ET04-W01
 DA_W02 = "bc-da-w02@da.local"  # ET04 / ET04-W02
@@ -79,6 +79,9 @@ class TestBroadcast(IntegrationTestCase):
 		frappe.db.delete("DA Notification", {"user": ("in", ALL_USERS)})
 		frappe.db.delete("DA Broadcast", {"sent_by": ("in", SENDERS)})
 		frappe.db.delete("DA RBAC Assignment", {"user": ("in", ALL_USERS)})
+		# A grant becomes a User Permission only when its Region / Woreda is in the geo
+		# master, and test_geo_master_sync empties those tables.
+		ensure_geo_masters()
 		_user(DA_W01, [C.ROLE_DA])
 		_user(DA_W02, [C.ROLE_DA])
 		_user(DA_ET03, [C.ROLE_DA])
