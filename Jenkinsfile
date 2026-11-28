@@ -388,7 +388,7 @@ ENDSSH
         }
 
         // staging -> health check through the QA APISIX gateway (13.127.77.101). Uses the *.qa host, which the QA
-        // wildcard DNS and certificate cover; da-backend-staging.oanstaging.com is routed to the same release.
+        // wildcard DNS and certificate cover (same as oan_grievance_ui / oan_grievance_service staging).
         stage('Verify (QA)') {
             when { beforeAgent true; branch 'staging' }
             steps {

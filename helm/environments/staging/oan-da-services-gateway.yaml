@@ -9,13 +9,8 @@ ingressClassName: apisix
 
 # The public host. *.qa.oanstaging.com is served by APISIX with the QA wildcard certificate
 # (oan-helm environments/qa/values/oan-apisix-gateway.yaml), so this chart has no ApisixTls.
-#
-# da-backend-staging.oanstaging.com: the old staging host (was the DA node, 65.0.132.192), now an A record to
-# the QA APISIX (13.127.77.101). The QA wildcard certificate does not cover it, so HTTPS on it needs its own
-# certificate on APISIX.
 hosts:
   - da-services.qa.oanstaging.com
-  - da-backend-staging.oanstaging.com
 
 # Frappe site name, sent as Host because Frappe selects the site from it. Must equal
 # frappe.jobs.createSite.siteName in oan-da-services.yaml.
