@@ -33,18 +33,16 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // Branches that build and deploy. Every other branch only runs the checks.
+                    // Branches that build and deploy on the DA node. Every other branch only runs the checks.
                     // Each target needs the services-backend / services-backend-deps releases and the
                     // ecr-regcred secret in its namespace on the DA node (Ansible apps role); the
                     // Deploy stage fails fast if they are missing.
+                    // staging is not a DA node target: it builds nothing and only promotes the develop
+                    // image to the QA cluster (stages "staging → QA cluster", then "Verify (QA)").
                     def targets = [
                         develop: [
                             namespace: 'develop',
                             verifyUrl: 'https://da-backend-development.oanstaging.com'
-                        ],
-                        staging: [
-                            namespace: 'staging',
-                            verifyUrl: 'https://da-backend-staging.oanstaging.com'
                         ]
                     ]
                     def target = targets[env.BRANCH_NAME]
@@ -358,7 +356,7 @@ ENDSSH
         }
 
         // ---- staging -> Helm release `da-services` on the QA cluster (qa.oanstaging.com), as oan_a2c ----
-        // Runs after the DA node staging deploy above, so a problem here never blocks it. Installs the promoted
+        // The only staging deploy (the DA node no longer runs a staging release). Installs the promoted
         // archive with helm/environments/staging; the kubeconfig is the jenkins-qa-deployer ServiceAccount
         // (oan-helm docs/qa-cluster.md), whose oan-cluster-access lists namespace da-app.
         stage('staging → QA cluster (helm)') {
@@ -386,6 +384,25 @@ ENDSSH
                 withCredentials([file(credentialsId: 'oan-qa-kubeconfig', variable: 'KUBECONFIG')]) {
                     sh 'GATEWAY_VALUES=helm/environments/staging/oan-da-services-gateway.yaml bash ci/deploy-gateway.sh'
                 }
+            }
+        }
+
+        // staging -> health check through the QA APISIX gateway (13.127.77.101). Uses the *.qa host, which the QA
+        // wildcard DNS and certificate cover (same as oan_grievance_ui / oan_grievance_service staging).
+        stage('Verify (QA)') {
+            when { beforeAgent true; branch 'staging' }
+            steps {
+                sh '''
+                    url="https://da-services.qa.oanstaging.com/api/v1/da-services/health"
+                    for i in $(seq 1 20); do
+                        body=$(curl -skL -m 10 "$url" || true)
+                        echo "attempt $i: $url -> $body"
+                        echo "$body" | grep -q '"status": *"healthy"' && exit 0
+                        sleep 6
+                    done
+                    echo "da-services did not report healthy at $url"
+                    exit 1
+                '''
             }
         }
 
@@ -432,7 +449,13 @@ ENDSSH
 
     post {
         failure {
-            echo "da-services ${env.BRANCH_NAME} build failed (namespace ${env.K8S_NAMESPACE}). Check the stage logs above; 'helm history ${env.HELM_RELEASE} -n ${env.K8S_NAMESPACE}' on the DA node shows the release state."
+            script {
+                if (env.BRANCH_NAME == 'staging') {
+                    echo "da-services staging build failed. Check the stage logs above; 'helm history da-services -n da-app' on the QA cluster shows the release state."
+                } else {
+                    echo "da-services ${env.BRANCH_NAME} build failed (namespace ${env.K8S_NAMESPACE}). Check the stage logs above; 'helm history ${env.HELM_RELEASE} -n ${env.K8S_NAMESPACE}' on the DA node shows the release state."
+                }
+            }
         }
     }
 }
